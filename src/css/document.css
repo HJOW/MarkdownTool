@@ -1,0 +1,51 @@
+:root { color-scheme: light; --paper: #fff; --ink: #202c31; --muted: #697b85; --rule: #dce4e8; --code: #f3f5f7; --link: #087e79; }
+:root[data-theme="dark"] { color-scheme: dark; --paper: #1c252b; --ink: #e1e9ed; --muted: #9baeb8; --rule: #33414a; --code: #151b20; --link: #76dbca; }
+@font-face { font-family: 'D2Coding'; font-style: normal; font-weight: 400; src: url('../fonts/D2Coding.woff2') format('woff2'); }
+@font-face { font-family: 'D2Coding'; font-style: normal; font-weight: 700; src: url('../fonts/D2CodingBold.woff2') format('woff2'); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.75 'D2Coding', monospace; overflow-wrap: break-word; }
+body * { font-family: 'D2Coding', monospace; }
+.markdown-body { max-width: 980px; margin: 0 auto; padding: 28px 36px 60px; }
+.markdown-body > :first-child { margin-top: 0; }
+h1, h2, h3, h4, h5, h6 { line-height: 1.4; margin: 1.4em 0 .65em; font-weight: 650; }
+h1 { font-size: 2em; } h2 { font-size: 1.5em; } h3 { font-size: 1.25em; }
+h1, h2 { padding-bottom: .3em; border-bottom: 1px solid var(--rule); }
+p, ul, ol, pre, blockquote, table, details { margin-top: 0; margin-bottom: 1em; }
+a { color: var(--link); text-decoration: none; } a:hover { text-decoration: underline; }
+img, video { max-width: 100%; height: auto; }
+blockquote { border-left: 4px solid var(--rule); margin-left: 0; padding: 0 1em; color: var(--muted); }
+blockquote > :last-child { margin-bottom: 0; }
+hr { height: 3px; background: var(--rule); border: 0; margin: 24px 0; }
+ul, ol { padding-left: 2em; } li + li { margin-top: .25em; }
+li > ul, li > ol { margin-bottom: 0; }
+code, pre, kbd { font-family: 'D2Coding', monospace; }
+code { font-size: .875em; border-radius: 4px; padding: .15em .35em; background: var(--code); }
+pre { overflow: auto; padding: 16px; background: var(--code); border-radius: 7px; line-height: 1.6; }
+pre code { padding: 0; background: transparent; font-size: .875em; }
+kbd { padding: 2px 5px; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; font-size: .85em; }
+table { display: block; max-width: 100%; width: max-content; border-collapse: collapse; overflow: auto; }
+td, th { border: 1px solid var(--rule); padding: 7px 13px; }
+th, tr:nth-child(even) { background: var(--code); }
+details { border: 1px solid var(--rule); border-radius: 6px; padding: 12px 16px; }
+summary { cursor: pointer; font-weight: 600; } details[open] > summary { margin-bottom: 12px; }
+.task-list-item { list-style-type: none; } .task-list-item-checkbox { margin-left: -1.3em; margin-right: .4em; }
+.footnotes { font-size: .85em; color: var(--muted); }
+.markdown-alert { border-left: 4px solid #2384d1; padding: 10px 16px; margin: 16px 0; }
+.markdown-alert > :last-child { margin-bottom: 0; }
+.markdown-alert-title { color: #2384d1; font-weight: 650; margin-bottom: 8px; }
+.markdown-alert-tip { border-color: #2ba26c; } .markdown-alert-tip .markdown-alert-title { color: #2ba26c; }
+.markdown-alert-important { border-color: #9974e8; } .markdown-alert-important .markdown-alert-title { color: #9974e8; }
+.markdown-alert-warning { border-color: #b58c13; } .markdown-alert-warning .markdown-alert-title { color: #b58c13; }
+.markdown-alert-caution { border-color: #e06363; } .markdown-alert-caution .markdown-alert-title { color: #e06363; }
+.math-block, .mermaid-diagram { overflow-x: auto; margin: 20px 0; text-align: center; }
+.mermaid-diagram svg { max-width: 100%; height: auto; }
+.render-error { color: #d45347; font-size: .85em; text-align: left; }
+.hljs-comment, .hljs-quote { color: var(--muted); }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #c04d8a; }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute { color: #21956a; }
+.hljs-title, .hljs-section, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: #4189ce; }
+.hljs-number, .hljs-built_in, .hljs-symbol, .hljs-bullet { color: #be782f; }
+.hljs-meta, .hljs-type, .hljs-params { color: #9770c7; }
+.hljs-emphasis { font-style: italic; } .hljs-strong { font-weight: bold; }
+@media (max-width: 500px) { .markdown-body { padding: 20px 16px 40px; } body { font-size: 14px; } }
+@media print { :root { color-scheme: light; --paper: #fff; --ink: #111; --muted: #555; --rule: #ccc; --code: #f5f5f5; --link: #166b8b; } .markdown-body { max-width: none; padding: 0; } }
