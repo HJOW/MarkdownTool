@@ -403,7 +403,7 @@ ${styleMarkup}
 const elements = Object.fromEntries([
     'editor', 'workspace', 'source-panel', 'preview-panel', 'preview', 'filename',
     'dirty-indicator', 'message', 'line-count', 'byte-count', 'theme-button', 'source-state',
-    'file-input', 'save-dialog', 'save-message', 'new-button', 'open-button', 'save-button',
+    'file-input', 'save-dialog', 'save-message', 'new-button', 'open-button', 'save-button', 'print-button',
     'font-option', 'embed-fonts', 'pdf-theme-option', 'pdf-theme-light', 'pdf-theme-dark', 'download-button', 'cancel-save'
 ].map((id) => [id, document.getElementById(id)]));
 
@@ -430,6 +430,12 @@ let fileRevision = 0;
 
 /** 저장 작업이 진행 중인지 나타낸다. */
 let saving = false;
+
+/** 인쇄용 문서를 준비하고 있는지 나타낸다. */
+let printing = false;
+
+/** 인쇄용 문서의 그림과 글꼴을 기다리는 최대 시간이다. */
+const PRINT_RESOURCE_TIMEOUT = 15000;
 
 /** 저장 요청 순번이다. 저장 창을 닫으면 진행 중이던 요청을 버린다. */
 let saveRevision = 0;
@@ -682,6 +688,81 @@ function download(contents, filename, type) {
 }
 
 /**
+ * 인쇄용 문서의 글꼴이나 그림 준비를 제한 시간까지만 기다린다.
+ * @param {Promise<unknown>} task 기다릴 작업
+ * @returns {Promise<void>}
+ */
+function waitForPrintResource(task) {
+    return new Promise((resolve) => {
+        const timer = window.setTimeout(resolve, PRINT_RESOURCE_TIMEOUT);
+        Promise.resolve(task).then(() => {
+            window.clearTimeout(timer);
+            resolve();
+        }, () => {
+            window.clearTimeout(timer);
+            resolve();
+        });
+    });
+}
+
+/**
+ * 인쇄 창의 글꼴과 그림이 준비되고 화면 배치가 끝날 때까지 기다린다.
+ * @param {Window} printWindow 인쇄할 문서를 담은 창
+ * @returns {Promise<void>}
+ */
+async function waitForPrintLayout(printWindow) {
+    const view = printWindow.document;
+    if (view.fonts) await waitForPrintResource(view.fonts.ready);
+    await Promise.all([...view.images].map((image) => {
+        if (image.complete) return waitForPrintResource(image.decode ? image.decode() : Promise.resolve());
+        return waitForPrintResource(new Promise((resolve) => {
+            image.addEventListener('load', resolve, { once: true });
+            image.addEventListener('error', resolve, { once: true });
+        }));
+    }));
+    await new Promise((resolve) => printWindow.requestAnimationFrame(() => printWindow.requestAnimationFrame(resolve)));
+}
+
+/**
+ * 현재 문서를 A4 페이지 여백이 적용된 독립 HTML로 만들어 브라우저 인쇄 창을 연다.
+ * @returns {Promise<void>}
+ */
+async function printDocument() {
+    if (printing) return;
+    // 비동기 변환 뒤에 창을 열면 팝업 차단 대상이 되므로 클릭 처리 중 먼저 연다.
+    const printWindow = window.open('', '_blank', 'popup,width=900,height=700');
+    if (!printWindow) {
+        message('인쇄 창이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.', true);
+        return;
+    }
+    printing = true;
+    elements['print-button'].disabled = true;
+    const snapshot = { ...state };
+    try {
+        printWindow.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${escapeHtml(snapshot.filename)} 인쇄 준비</title></head><body><p>인쇄용 문서를 준비하고 있습니다…</p></body></html>`);
+        printWindow.document.close();
+        // 인쇄는 종이를 기준으로 밝기 테마를 사용하고, 상대 그림 주소는 현재 앱 주소를 기준으로 읽는다.
+        const html = await createHtml(snapshot.source, snapshot.filename, 'light', true, true);
+        if (printWindow.closed) return;
+        const printHtml = html.replace('<meta http-equiv="Content-Security-Policy"', `<base href="${escapeHtml(window.location.href)}">\n<meta http-equiv="Content-Security-Policy"`);
+        printWindow.document.open();
+        printWindow.document.write(printHtml);
+        printWindow.document.close();
+        await waitForPrintLayout(printWindow);
+        if (printWindow.closed) return;
+        printWindow.focus();
+        printWindow.print();
+        message('브라우저 인쇄 창을 열었습니다.');
+    } catch {
+        if (!printWindow.closed) printWindow.close();
+        message('인쇄용 문서를 만들지 못했습니다. 다시 시도해 주세요.', true);
+    } finally {
+        printing = false;
+        elements['print-button'].disabled = false;
+    }
+}
+
+/**
  * 저장 창에서 고른 형식으로 문서를 만들어 내려받는다.
  * @returns {Promise<void>}
  */
@@ -777,6 +858,7 @@ function showSaveDialog() {
     elements['save-dialog'].showModal();
 }
 elements['save-button'].addEventListener('click', showSaveDialog);
+elements['print-button'].addEventListener('click', () => void printDocument());
 
 // HTML 글꼴과 PDF 테마는 해당 저장 형식에서만 고를 수 있다.
 document.querySelectorAll('input[name="save-format"]').forEach((radio) => {

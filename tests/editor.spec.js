@@ -324,6 +324,26 @@ test('PDF 테마는 저장본에서만 고르고 현재 화면 테마를 바꾸�
     await expect(page.locator('html')).toHaveAttribute('data-theme', appTheme);
 });
 
+test('인쇄용 문서에 A4 페이지 여백을 적용하고 브라우저 인쇄를 호출한다', async ({ page, context }) => {
+    await context.addInitScript(() => {
+        window.print = () => { document.documentElement.dataset.printCalled = 'true'; };
+    });
+    await setSource(page, '# 인쇄 문서\n\n본문입니다.\n\n```javascript\nconst printed = true;\n```');
+    const appTheme = await page.locator('html').getAttribute('data-theme');
+    const pendingPopup = context.waitForEvent('page');
+    await page.getByRole('button', { name: '인쇄', exact: true }).click();
+    const printed = await pendingPopup;
+    await expect(printed.getByRole('heading', { name: '인쇄 문서' })).toBeVisible();
+    await expect(printed.locator('html')).toHaveAttribute('data-theme', 'light');
+    const printStyles = (await printed.locator('style').allTextContents()).join('\n');
+    expect(printStyles).toContain('@page { size: A4 portrait; margin: 10mm; }');
+    expect(printStyles).toContain('break-inside: avoid-page');
+    await expect(printed.locator('html')).toHaveAttribute('data-print-called', 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', appTheme);
+    await expect(page.locator('#dirty-indicator')).toBeVisible();
+    await printed.close();
+});
+
 test('테마를 유지하고 줄번호 스크롤과 좁은 화면을 처리한다', async ({ page }) => {
     await page.locator('#theme-button').click();
     const theme = await page.locator('html').getAttribute('data-theme');
