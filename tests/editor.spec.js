@@ -102,21 +102,22 @@ test('편집기가 Markdown 문법을 강조하고 줄번호를 한 번만 표�
     expect(fontFamily).toContain('D2Coding');
 });
 
-test('모드 전환 시 원문을 유지하고 보기와 같이 보기에서 편집을 막는다', async ({ page }) => {
+test('모드 전환 시 원문을 유지하고 보기에서만 편집을 막는다', async ({ page }) => {
     await setSource(page, '# 문서 제목\n\n**굵은 글씨**');
     const bytes = await page.locator('#byte-count').textContent();
     await changeMode(page, 'view');
     await expect(page.locator('#source-panel')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('data-readonly', 'true');
     await expect(page.frameLocator('#preview').getByRole('heading', { name: '문서 제목' })).toBeVisible();
     await changeMode(page, 'split');
     await expect(page.locator('#source-panel')).toBeVisible();
-    await expect(page.locator('#source-state')).toHaveText('읽기 전용');
-    await page.locator(EDITOR_INPUT).focus();
-    await page.keyboard.press('End');
-    await page.keyboard.insertText('changed');
-    await expect(page.locator('#editor .view-lines')).toContainText('굵은 글씨');
-    await expect(page.locator('#editor .view-lines')).not.toContainText('changed');
-    await expect(page.locator('#byte-count')).toHaveText(bytes);
+    await expect(page.locator('#source-state')).toHaveText('편집 가능');
+    await expect(page.locator('#editor')).toHaveAttribute('data-readonly', 'false');
+    // 같이 보기에서 고친 원문은 문서 상태와 오른쪽 미리보기에 함께 반영된다.
+    await setSource(page, '# 같이 보기 제목');
+    await expect(page.locator('#editor .view-lines')).toContainText('같이 보기 제목');
+    await expect(page.locator('#byte-count')).not.toHaveText(bytes);
+    await expect(page.frameLocator('#preview').getByRole('heading', { name: '같이 보기 제목' })).toBeVisible();
     const layout = await page.locator('#workspace').evaluate((workspace) => {
         const left = workspace.children[0].getBoundingClientRect();
         const right = workspace.children[1].getBoundingClientRect();
@@ -125,6 +126,7 @@ test('모드 전환 시 원문을 유지하고 보기와 같이 보기에서 편
     expect(layout).toEqual({ sideBySide: true, sameTop: true });
     await changeMode(page, 'edit');
     await expect(page.locator('#source-state')).toHaveText('편집 가능');
+    await expect(page.locator('#preview-panel')).toBeHidden();
     await setSource(page, '# 수정한 제목');
     await changeMode(page, 'view');
     await expect(page.frameLocator('#preview').getByRole('heading', { name: '수정한 제목' })).toBeVisible();

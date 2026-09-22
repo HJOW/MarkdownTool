@@ -419,6 +419,12 @@ const state = { source: '', savedSource: '', filename: 'notitle', mode: 'edit', 
 /** 미리보기 요청 순번이다. 늦게 끝난 변환이 최신 화면을 덮어쓰지 못하게 한다. */
 let previewRevision = 0;
 
+/** 같이 보기에서 원문 입력이 멈추기를 기다리는 시간(밀리초)이다. */
+const PREVIEW_DELAY = 300;
+
+/** 예약해 둔 미리보기 갱신의 타이머 번호다. 0이면 예약이 없다. */
+let previewTimer = 0;
+
 /** 파일 열기 요청 순번이다. 먼저 고른 파일이 나중 선택을 덮어쓰지 못하게 한다. */
 let fileRevision = 0;
 
@@ -461,10 +467,35 @@ const sourceEditor = createSourceEditor({
  * @returns {void}
  */
 function handleSourceChange() {
-    if (state.mode !== 'edit') return;
+    if (state.mode === 'view') return;
     state.source = sourceEditor.getText().replace(/\n/g, state.newline);
     message('');
     updateStats();
+    // 같이 보기에서는 원문을 고치는 대로 오른쪽 미리보기도 따라 갱신한다.
+    if (state.mode === 'split') schedulePreview();
+}
+
+/**
+ * 예약해 둔 미리보기 갱신을 취소한다.
+ * @returns {void}
+ */
+function cancelScheduledPreview() {
+    if (!previewTimer) return;
+    window.clearTimeout(previewTimer);
+    previewTimer = 0;
+}
+
+/**
+ * 원문 입력이 잠시 멈춘 뒤에 미리보기를 다시 만들도록 예약한다.
+ * 글자마다 변환하지 않아 입력이 끊기지 않는다.
+ * @returns {void}
+ */
+function schedulePreview() {
+    cancelScheduledPreview();
+    previewTimer = window.setTimeout(() => {
+        previewTimer = 0;
+        void refreshPreview();
+    }, PREVIEW_DELAY);
 }
 
 /**
@@ -525,9 +556,11 @@ function setMode(mode) {
     elements.workspace.dataset.mode = mode;
     elements['source-panel'].hidden = mode === 'view';
     elements['preview-panel'].hidden = mode === 'edit';
-    sourceEditor.setReadOnly(mode !== 'edit');
-    elements['source-state'].textContent = mode === 'edit' ? '편집 가능' : '읽기 전용';
+    // 보기 모드에서만 편집을 막는다. 같이 보기에서는 왼쪽에서 원문을 그대로 고칠 수 있다.
+    sourceEditor.setReadOnly(mode === 'view');
+    elements['source-state'].textContent = mode === 'view' ? '읽기 전용' : '편집 가능';
     document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
+    cancelScheduledPreview();
     if (mode !== 'edit') void refreshPreview();
     else previewRevision += 1;
     // 숨겼던 원문 영역이 다시 보이면 편집기 크기를 현재 화면에 맞춘다.
@@ -548,6 +581,7 @@ function setDocument(source, filename, bom = false) {
     state.bom = bom;
     state.newline = source.includes('\r\n') ? '\r\n' : source.includes('\r') && !source.includes('\n') ? '\r' : '\n';
     sourceEditor.setDocument(source);
+    cancelScheduledPreview();
     previewRevision += 1;
     elements.preview.srcdoc = '';
     elements.preview.removeAttribute('aria-busy');
@@ -698,7 +732,10 @@ function applyTheme(theme, persist = true) {
     if (persist) {
         try { localStorage.setItem('mdtool-theme', theme); } catch { /* 저장소가 차단되어도 화면 전환은 유지한다. */ }
     }
-    if (state.mode !== 'edit') void refreshPreview();
+    if (state.mode !== 'edit') {
+        cancelScheduledPreview();
+        void refreshPreview();
+    }
 }
 
 // 아래부터는 화면 조작을 문서 기능에 연결한다.
