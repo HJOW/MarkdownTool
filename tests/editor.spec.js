@@ -84,6 +84,7 @@ test('빈 문서, 줄번호, 공백 줄과 UTF-8 바이트를 표시한다', asy
     await expect(page.locator('#filename')).toHaveText('notitle');
     await expect(page.locator('#line-count')).toHaveText('1줄');
     await expect(page.locator('#byte-count')).toHaveText('0 B');
+    await expect(page.locator('#editor .editorPlaceholder')).toBeVisible();
     expect(await lineNumbers(page)).toEqual([1]);
     const source = '한글\n \n\n끝😀\n';
     await setSource(page, source);
@@ -222,6 +223,7 @@ test('파일명을 기억하고 UTF-8 BOM 및 CRLF 원문을 Markdown으로 보�
     await page.locator('#file-input').setInputFiles({ name: '회의.초안.MD', mimeType: 'text/markdown', buffer: original });
     await expect(page.locator('#filename')).toHaveText('회의.초안.MD');
     await expect(page.locator('#editor .view-lines')).toContainText('# 한글');
+    await expect(page.locator('#editor .editorPlaceholder')).toBeHidden();
     await expect(page.locator('#byte-count')).toHaveText(`${original.length} B`);
     expect(await lineNumbers(page)).toEqual([1, 2, 3, 4]);
     const downloaded = await save(page, 'md');

@@ -82,6 +82,8 @@ function defineTheme(theme) {
  * }} 문서와 화면 상태를 다루는 편집기 조작 함수 모음
  */
 export function createSourceEditor({ host, ariaLabel, placeholder, onChange }) {
+    // Monaco는 모델을 교체할 때 placeholder 표시 상태를 즉시 다시 읽지 않는 경우가 있다.
+    let placeholderVisible = true;
     const editor = monaco.editor.create(host, {
         value: '',
         language: 'markdown',
@@ -113,7 +115,17 @@ export function createSourceEditor({ host, ariaLabel, placeholder, onChange }) {
         matchBrackets: 'near',
         contextmenu: true
     });
-    editor.onDidChangeModelContent(() => onChange());
+    /** 원문이 비었는지에 맞춰 placeholder 옵션을 필요한 경우에만 바꾼다. */
+    function syncPlaceholder() {
+        const shouldShow = editor.getValue().length === 0;
+        if (placeholderVisible === shouldShow) return;
+        placeholderVisible = shouldShow;
+        editor.updateOptions({ placeholder: shouldShow ? placeholder : '' });
+    }
+    editor.onDidChangeModelContent(() => {
+        syncPlaceholder();
+        onChange();
+    });
     // 글꼴 파일을 늦게 받아도 글자 너비 계산이 어긋나지 않게 다시 측정한다.
     document.fonts.ready.then(() => monaco.editor.remeasureFonts()).catch(() => { /* 글꼴 상태를 알 수 없으면 기본 측정값을 유지한다. */ });
 
@@ -125,8 +137,12 @@ export function createSourceEditor({ host, ariaLabel, placeholder, onChange }) {
          */
         setDocument(source) {
             const previous = editor.getModel();
-            editor.setModel(monaco.editor.createModel(source.replace(/\r\n|\r/g, '\n'), 'markdown'));
+            const normalized = source.replace(/\r\n|\r/g, '\n');
+            editor.setModel(monaco.editor.createModel(normalized, 'markdown'));
             previous?.dispose();
+            // 모델 교체 직후 옵션을 다시 설정해, 불러온 원문과 안내 문구가 겹치지 않게 한다.
+            placeholderVisible = normalized.length === 0;
+            editor.updateOptions({ placeholder: placeholderVisible ? placeholder : '' });
         },
         /**
          * 편집 중인 원문을 읽는다. 저장과 통계에서 쓰는 규칙에 맞추어 항상 LF로 돌려준다.
