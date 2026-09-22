@@ -25,8 +25,7 @@ module.exports = [
             sourceType: 'module',
             globals: {
                 ...globals.browser,
-                ...globals.worker,
-                MATH_STYLES: 'readonly'
+                ...globals.worker
             }
         },
         rules: js.configs.recommended.rules

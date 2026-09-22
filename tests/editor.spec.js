@@ -13,6 +13,76 @@ test.beforeEach(async ({ page }) => {
     await expect(page.locator(EDITOR_INPUT)).toBeFocused();
 });
 
+test('영어를 기본값으로 사용하고 화면에서 고른 한국어를 기억한다', async ({ page }) => {
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.locator('#language-select')).toHaveValue('en');
+    await expect(page.getByRole('button', { name: 'New' })).toBeVisible();
+    await expect(page.locator('#line-count')).toHaveText('1 line');
+
+    await page.locator('#language-select').selectOption('ko');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+    await expect(page.getByRole('button', { name: '새로 만들기' })).toBeVisible();
+    await expect(page.locator('#line-count')).toHaveText('1줄');
+    await page.reload();
+    await expect(page.locator('#language-select')).toHaveValue('ko');
+    await expect(page.getByRole('button', { name: '새로 만들기' })).toBeVisible();
+});
+
+test('시스템 언어가 한국어이면 첫 화면을 한국어로 연다', async ({ browser }) => {
+    const context = await browser.newContext({ locale: 'ko-KR' });
+    const koreanPage = await context.newPage();
+    try {
+        await koreanPage.goto('http://127.0.0.1:9804/');
+        await expect(koreanPage.locator('html')).toHaveAttribute('lang', 'ko');
+        await expect(koreanPage.locator('#language-select')).toHaveValue('ko');
+        await expect(koreanPage.getByRole('button', { name: '파일 불러오기' })).toBeVisible();
+    } finally {
+        await context.close();
+    }
+});
+
+test('지원 브라우저에는 저장과 불러오기를 제외한 WebMCP 도구를 등록한다', async ({ page }) => {
+    await page.addInitScript(() => {
+        window.__webMcpTools = {};
+        window.__modelContext = {
+            async registerTool(tool) {
+                window.__webMcpTools[tool.name] = tool;
+            }
+        };
+        Object.defineProperty(Document.prototype, 'modelContext', {
+            configurable: true,
+            get: () => window.__modelContext
+        });
+    });
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => Object.keys(window.__webMcpTools).length)).toBe(7);
+    const names = await page.evaluate(() => Object.keys(window.__webMcpTools).sort());
+    expect(names).toEqual([
+        'create_new_document', 'get_document_state', 'print_document', 'set_language',
+        'set_markdown_source', 'set_theme', 'set_view_mode'
+    ]);
+    expect(names.some((name) => /save|open|load/.test(name))).toBe(false);
+
+    const result = await page.evaluate(async () => {
+        await window.__webMcpTools.set_markdown_source.execute({ source: '# WebMCP\n\n본문' });
+        await window.__webMcpTools.set_view_mode.execute({ mode: 'split' });
+        await window.__webMcpTools.set_theme.execute({ theme: 'dark' });
+        await window.__webMcpTools.set_language.execute({ language: 'en' });
+        return window.__webMcpTools.get_document_state.execute({});
+    });
+    expect(result).toMatchObject({ source: '# WebMCP\n\n본문', modified: true, lineCount: 3, mode: 'split', theme: 'dark', language: 'en' });
+    await expect(page.locator('#workspace')).toHaveAttribute('data-mode', 'split');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('#language-select')).toHaveValue('en');
+
+    const created = await page.evaluate(async () => {
+        window.confirm = () => true;
+        return window.__webMcpTools.create_new_document.execute({});
+    });
+    expect(created).toEqual({ created: true });
+    await expect(page.locator('#byte-count')).toHaveText('0 B');
+});
+
 /**
  * Monaco 편집기의 원문을 지정한 내용으로 바꾼다.
  * @param {import('@playwright/test').Page} page 검사 중인 화면
@@ -61,7 +131,7 @@ async function changeMode(page, mode) {
  * @returns {Promise<import('@playwright/test').Download>} 시작된 다운로드
  */
 async function save(page, format, embedFonts = true, pdfTheme = 'light') {
-    await page.getByRole('button', { name: '저장', exact: true }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.locator(`input[name="save-format"][value="${format}"]`).check();
     if (format === 'html') {
         await expect(page.locator('#font-option')).toBeVisible();
@@ -82,13 +152,13 @@ async function save(page, format, embedFonts = true, pdfTheme = 'light') {
 
 test('빈 문서, 줄번호, 공백 줄과 UTF-8 바이트를 표시한다', async ({ page }) => {
     await expect(page.locator('#filename')).toHaveText('notitle');
-    await expect(page.locator('#line-count')).toHaveText('1줄');
+    await expect(page.locator('#line-count')).toHaveText('1 line');
     await expect(page.locator('#byte-count')).toHaveText('0 B');
     await expect(page.locator('#editor .editorPlaceholder')).toBeVisible();
     expect(await lineNumbers(page)).toEqual([1]);
     const source = '한글\n \n\n끝😀\n';
     await setSource(page, source);
-    await expect(page.locator('#line-count')).toHaveText('5줄');
+    await expect(page.locator('#line-count')).toHaveText('5 lines');
     await expect(page.locator('#byte-count')).toHaveText(`${Buffer.byteLength(source)} B`);
     expect(await lineNumbers(page)).toEqual([1, 2, 3, 4, 5]);
     await expect(page.locator('#dirty-indicator')).toBeVisible();
@@ -119,7 +189,7 @@ test('모드 전환 시 원문을 유지하고 보기에서만 편집을 막는�
     await expect(page.frameLocator('#preview').getByRole('heading', { name: '문서 제목' })).toBeVisible();
     await changeMode(page, 'split');
     await expect(page.locator('#source-panel')).toBeVisible();
-    await expect(page.locator('#source-state')).toHaveText('편집 가능');
+    await expect(page.locator('#source-state')).toHaveText('Editable');
     await expect(page.locator('#editor')).toHaveAttribute('data-readonly', 'false');
     // 같이 보기에서 고친 원문은 문서 상태와 오른쪽 미리보기에 함께 반영된다.
     await setSource(page, '# 같이 보기 제목');
@@ -133,7 +203,7 @@ test('모드 전환 시 원문을 유지하고 보기에서만 편집을 막는�
     });
     expect(layout).toEqual({ sideBySide: true, sameTop: true });
     await changeMode(page, 'edit');
-    await expect(page.locator('#source-state')).toHaveText('편집 가능');
+    await expect(page.locator('#source-state')).toHaveText('Editable');
     await expect(page.locator('#preview-panel')).toBeHidden();
     await setSource(page, '# 수정한 제목');
     await changeMode(page, 'view');
@@ -254,20 +324,20 @@ test('잘못된 인코딩과 확장자는 기존 문서를 보존하고 동일 �
 
 test('저장 취소, 새로 만들기 취소 및 확정, 기본 다운로드 이름을 처리한다', async ({ page }) => {
     await setSource(page, '# 기존 내용');
-    await page.getByRole('button', { name: '저장', exact: true }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('#save-dialog')).toBeVisible();
-    await page.getByRole('button', { name: '취소', exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(page.locator('#save-dialog')).toBeHidden();
     await expect(page.locator('#editor .view-lines')).toHaveText('# 기존 내용');
     page.once('dialog', (dialog) => dialog.dismiss());
-    await page.getByRole('button', { name: '새로 만들기' }).click();
+    await page.getByRole('button', { name: 'New' }).click();
     await expect(page.locator('#editor .view-lines')).toHaveText('# 기존 내용');
     await changeMode(page, 'view');
     page.once('dialog', (dialog) => dialog.accept());
-    await page.getByRole('button', { name: '새로 만들기' }).click();
+    await page.getByRole('button', { name: 'New' }).click();
     await expect(page.locator('#filename')).toHaveText('notitle');
     await expect(page.locator('#byte-count')).toHaveText('0 B');
-    await expect(page.locator('#line-count')).toHaveText('1줄');
+    await expect(page.locator('#line-count')).toHaveText('1 line');
     expect(await lineNumbers(page)).toEqual([1]);
     await changeMode(page, 'view');
     await expect(page.frameLocator('#preview').locator('.markdown-body')).toBeEmpty();
@@ -315,13 +385,13 @@ test('PDF 저장본을 A4 여러 쪽으로 나누고 원문 수정 표시는 유
 
 test('PDF 테마는 저장본에서만 고르고 현재 화면 테마를 바꾸지 않는다', async ({ page }) => {
     const appTheme = await page.locator('html').getAttribute('data-theme');
-    await page.getByRole('button', { name: '저장', exact: true }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.locator('input[name="save-format"][value="pdf"]').check();
     await expect(page.locator('#pdf-theme-option')).toBeVisible();
     await page.locator('#pdf-theme-dark').check();
     await expect(page.locator('#pdf-theme-dark')).toBeChecked();
     await expect(page.locator('html')).toHaveAttribute('data-theme', appTheme);
-    await page.getByRole('button', { name: '취소', exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(page.locator('#save-dialog')).toBeHidden();
     await expect(page.locator('html')).toHaveAttribute('data-theme', appTheme);
 });
@@ -333,7 +403,7 @@ test('인쇄용 문서에 A4 페이지 여백을 적용하고 브라우저 인�
     await setSource(page, '# 인쇄 문서\n\n본문입니다.\n\n```javascript\nconst printed = true;\n```');
     const appTheme = await page.locator('html').getAttribute('data-theme');
     const pendingPopup = context.waitForEvent('page');
-    await page.getByRole('button', { name: '인쇄', exact: true }).click();
+    await page.getByRole('button', { name: 'Print', exact: true }).click();
     const printed = await pendingPopup;
     await expect(printed.getByRole('heading', { name: '인쇄 문서' })).toBeVisible();
     await expect(printed.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -359,7 +429,7 @@ test('테마를 유지하고 줄번호 스크롤과 좁은 화면을 처리한�
     await changeMode(page, 'split');
     await expect(page.frameLocator('#preview').locator('html')).toHaveAttribute('data-theme', theme);
     await page.setViewportSize({ width: 375, height: 812 });
-    await expect(page.getByRole('button', { name: '새로 만들기' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New' })).toBeVisible();
     expect(await page.locator('#open-button').evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });

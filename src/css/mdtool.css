@@ -30,7 +30,7 @@
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
 body { display: flex; flex-direction: column; height: 100dvh; min-width: 320px; background: var(--bg); color: var(--text); font-size: 14px; }
-button, input, textarea { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button { border: 1px solid var(--border); border-radius: 7px; padding: 9px 13px; background: var(--surface); color: var(--text); cursor: pointer; }
 button:hover { background: var(--hover); }
 button:disabled { opacity: .6; cursor: wait; }
@@ -68,6 +68,9 @@ button.primary { border-color: var(--accent); color: var(--surface); background:
 .bottom-toolbar { min-height: 47px; padding: 6px 24px; justify-content: space-between; border-top: 1px solid var(--border); font-size: 12px; }
 .document-stats { display: flex; align-items: center; gap: 16px; color: var(--muted); }
 .document-stats span + span { border-left: 1px solid var(--border); padding-left: 16px; }
+.display-actions { display: flex; align-items: center; gap: 12px; }
+.language-control { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.language-control select { border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; background: var(--surface); color: var(--text); }
 .theme-button { font-size: 12px; padding: 6px 10px; }
 dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); padding: 28px; box-shadow: var(--shadow); }
 dialog::backdrop { background: #07161d80; backdrop-filter: blur(3px); }
@@ -116,4 +119,6 @@ noscript { padding: 20px; color: #c53a32; }
     .panel-heading span { display: none; }
     .document-stats { gap: 8px; }
     .document-stats span + span { padding-left: 8px; }
+    .bottom-toolbar { align-items: flex-start; gap: 8px; }
+    .display-actions { flex-direction: column; align-items: flex-end; gap: 6px; }
 }

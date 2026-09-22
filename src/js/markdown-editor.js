@@ -74,9 +74,11 @@ function defineTheme(theme) {
  * @param {() => void} options.onChange 원문이 바뀔 때마다 부를 함수
  * @returns {{
  *     setDocument: (source: string) => void,
+ *     setText: (source: string) => void,
  *     getText: () => string,
  *     setReadOnly: (readOnly: boolean) => void,
  *     applyTheme: (theme: 'light'|'dark') => void,
+ *     setLanguage: (labels: {ariaLabel: string, placeholder: string}) => void,
  *     focus: () => void,
  *     layout: () => void
  * }} 문서와 화면 상태를 다루는 편집기 조작 함수 모음
@@ -145,6 +147,14 @@ export function createSourceEditor({ host, ariaLabel, placeholder, onChange }) {
             editor.updateOptions({ placeholder: placeholderVisible ? placeholder : '' });
         },
         /**
+         * 현재 문서의 원문을 바꾸고 일반 편집과 같은 변경 알림을 발생시킨다.
+         * @param {string} source 새 Markdown 원문
+         * @returns {void}
+         */
+        setText(source) {
+            editor.setValue(source.replace(/\r\n|\r/g, '\n'));
+        },
+        /**
          * 편집 중인 원문을 읽는다. 저장과 통계에서 쓰는 규칙에 맞추어 항상 LF로 돌려준다.
          * @returns {string} 편집기에 있는 Markdown 원문
          */
@@ -167,6 +177,16 @@ export function createSourceEditor({ host, ariaLabel, placeholder, onChange }) {
          */
         applyTheme(theme) {
             defineTheme(theme);
+        },
+        /**
+         * 화면 언어가 바뀌면 편집기의 접근성 이름과 빈 문서 안내도 함께 바꾼다.
+         * @param {{ariaLabel: string, placeholder: string}} labels 새 화면 문구
+         * @returns {void}
+         */
+        setLanguage(labels) {
+            ariaLabel = labels.ariaLabel;
+            placeholder = labels.placeholder;
+            editor.updateOptions({ ariaLabel, placeholder: placeholderVisible ? placeholder : '' });
         },
         /**
          * 편집기에 입력 초점을 준다.

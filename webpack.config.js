@@ -60,11 +60,8 @@ module.exports = {
                 use: [MiniCssExtractPlugin.loader, 'css-loader']
             },
             {
-                test: /\.woff2$/,
-                type: 'asset/inline'
-            },
-            {
-                test: /\.ttf$/,
+                // 수식 CSS가 제공하는 모든 글꼴 형식도 독립 파일 없이 메인 번들 문자열에 넣는다.
+                test: /\.(woff2?|ttf)$/,
                 type: 'asset/inline'
             }
         ]

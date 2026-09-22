@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -13,73 +13,81 @@
 <body>
     <header class="toolbar top-toolbar">
         <div class="brand"><span class="brand-mark" aria-hidden="true">M↓</span><strong>Markdown Tool</strong></div>
-        <div class="file-actions" role="group" aria-label="파일 작업">
-            <button id="new-button" type="button">새로 만들기</button>
-            <button id="open-button" type="button">파일 불러오기</button>
-            <button id="save-button" type="button" class="primary">저장</button>
-            <button id="print-button" type="button">인쇄</button>
+        <div class="file-actions" role="group" aria-label="File actions" data-i18n-aria-label="fileActions">
+            <button id="new-button" type="button" data-i18n="newDocument">New</button>
+            <button id="open-button" type="button" data-i18n="openFile">Open file</button>
+            <button id="save-button" type="button" class="primary" data-i18n="save">Save</button>
+            <button id="print-button" type="button" data-i18n="print">Print</button>
         </div>
         <fieldset class="mode-switch">
-            <legend class="visually-hidden">화면 모드</legend>
-            <label><input type="radio" name="mode" value="edit" checked/><span>편집</span></label>
-            <label><input type="radio" name="mode" value="view"/><span>보기</span></label>
-            <label><input type="radio" name="mode" value="split"/><span>같이 보기</span></label>
+            <legend class="visually-hidden" data-i18n="screenMode">View mode</legend>
+            <label><input type="radio" name="mode" value="edit" checked/><span data-i18n="edit">Edit</span></label>
+            <label><input type="radio" name="mode" value="view"/><span data-i18n="view">Preview</span></label>
+            <label><input type="radio" name="mode" value="split"/><span data-i18n="split">Side by side</span></label>
         </fieldset>
     </header>
     <div class="document-bar">
         <span class="document-name" id="filename">notitle</span>
-        <span id="dirty-indicator" class="dirty-indicator" hidden>수정됨</span>
+        <span id="dirty-indicator" class="dirty-indicator" hidden data-i18n="modified">Modified</span>
         <span id="message" role="status" aria-live="polite"></span>
     </div>
     <main id="workspace" class="workspace" data-mode="edit">
         <section id="source-panel" class="panel source-panel" aria-labelledby="source-heading">
-            <div class="panel-heading"><h1 id="source-heading">Markdown</h1><span id="source-state">편집 가능</span></div>
+            <div class="panel-heading"><h1 id="source-heading">Markdown</h1><span id="source-state" data-i18n="editable">Editable</span></div>
             <div class="editor-area"><div id="editor" class="source-editor"></div></div>
         </section>
         <section id="preview-panel" class="panel preview-panel" aria-labelledby="preview-heading" hidden>
-            <div class="panel-heading"><h2 id="preview-heading">HTML 미리보기</h2><span>읽기 전용</span></div>
-            <iframe id="preview" title="Markdown 문서 미리보기" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+            <div class="panel-heading"><h2 id="preview-heading" data-i18n="previewHeading">HTML preview</h2><span data-i18n="readOnly">Read only</span></div>
+            <iframe id="preview" title="Markdown document preview" data-i18n-title="previewTitle" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
         </section>
     </main>
     <footer class="toolbar bottom-toolbar">
-        <div class="document-stats" aria-label="문서 정보">
-            <span id="line-count">1줄</span><span id="byte-count">0 B</span><span>UTF-8</span>
+        <div class="document-stats" aria-label="Document information" data-i18n-aria-label="documentInfo">
+            <span id="line-count">1 line</span><span id="byte-count">0 B</span><span>UTF-8</span>
         </div>
-        <button id="theme-button" type="button" class="theme-button" aria-pressed="false">다크 모드</button>
+        <div class="display-actions">
+            <label class="language-control" for="language-select"><span data-i18n="language">Language</span>
+                <select id="language-select">
+                    <option value="en">English</option>
+                    <option value="ko">한국어</option>
+                </select>
+            </label>
+            <button id="theme-button" type="button" class="theme-button" aria-pressed="false">Dark mode</button>
+        </div>
     </footer>
     <input id="file-input" type="file" accept=".md,.markdown,text/markdown" hidden/>
     <dialog id="save-dialog" aria-labelledby="save-title" aria-describedby="save-description">
-        <h2 id="save-title">문서 저장</h2>
-        <p id="save-description">다운로드할 형식과 옵션을 선택하세요.</p>
+        <h2 id="save-title" data-i18n="saveTitle">Save document</h2>
+        <p id="save-description" data-i18n="saveDescription">Choose a download format and its options.</p>
         <div class="save-options">
             <label class="save-option">
                 <input type="radio" name="save-format" value="md" checked/>
-                <span><strong>Markdown <small>.md</small></strong><small>원문을 저장하여 계속 편집하기</small></span>
+                <span><strong>Markdown <small>.md</small></strong><small data-i18n="markdownSaveDescription">Save the source and continue editing</small></span>
             </label>
             <label class="save-option">
                 <input type="radio" name="save-format" value="html"/>
-                <span><strong>HTML <small>.html</small></strong><small>서식이 적용된 웹 문서로 저장하기</small></span>
+                <span><strong>HTML <small>.html</small></strong><small data-i18n="htmlSaveDescription">Save as a formatted web document</small></span>
             </label>
             <label class="save-option">
                 <input type="radio" name="save-format" value="pdf"/>
-                <span><strong>PDF <small>.pdf</small></strong><small>인쇄와 공유용 A4 문서로 저장하기</small></span>
+                <span><strong>PDF <small>.pdf</small></strong><small data-i18n="pdfSaveDescription">Save as an A4 document for printing and sharing</small></span>
             </label>
         </div>
-        <label id="font-option" hidden><input id="embed-fonts" type="checkbox" checked/> <span><strong>글꼴 포함</strong><small> 해제하면 CDN에서 글꼴을 불러옵니다.</small></span></label>
+        <label id="font-option" hidden><input id="embed-fonts" type="checkbox" checked/> <span><strong data-i18n="embedFonts">Embed fonts</strong><small data-i18n="embedFontsDescription">Clear this option to load fonts from a CDN.</small></span></label>
         <fieldset id="pdf-theme-option" hidden>
-            <legend>PDF 테마</legend>
-            <p>이 선택은 저장할 PDF에만 적용되며, 현재 화면과 미리보기 테마는 바꾸지 않습니다.</p>
+            <legend data-i18n="pdfTheme">PDF theme</legend>
+            <p data-i18n="pdfThemeDescription">This choice only affects the saved PDF, not the current screen or preview.</p>
             <div class="pdf-theme-options">
-                <label><input id="pdf-theme-light" type="radio" name="pdf-theme" value="light" checked/> 밝기 모드</label>
-                <label><input id="pdf-theme-dark" type="radio" name="pdf-theme" value="dark"/> 다크 모드</label>
+                <label><input id="pdf-theme-light" type="radio" name="pdf-theme" value="light" checked/> <span data-i18n="lightTheme">Light theme</span></label>
+                <label><input id="pdf-theme-dark" type="radio" name="pdf-theme" value="dark"/> <span data-i18n="darkTheme">Dark theme</span></label>
             </div>
         </fieldset>
         <p id="save-message" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
-            <form method="dialog"><button id="cancel-save" type="submit">취소</button></form>
-            <button id="download-button" type="button" class="primary">파일 다운로드</button>
+            <form method="dialog"><button id="cancel-save" type="submit" data-i18n="cancel">Cancel</button></form>
+            <button id="download-button" type="button" class="primary" data-i18n="downloadFile">Download file</button>
         </div>
     </dialog>
-    <noscript>이 도구를 사용하려면 브라우저에서 JavaScript를 허용해 주세요.</noscript>
+    <noscript data-i18n="javascriptRequired">Enable JavaScript in your browser to use this tool.</noscript>
 </body>
 </html>

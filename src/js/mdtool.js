@@ -6,10 +6,27 @@ import GithubSlugger from 'github-slugger';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js/lib/common';
 import katex from 'katex';
+import mathStylesheet from '!!css-loader?exportType=string!katex/dist/katex.min.css';
 import documentStyles from '../css/document.css';
 import { createSourceEditor } from './markdown-editor.js';
+import { detectLanguage, normalizeLanguage, translate } from './localization.js';
 
-// MATH_STYLES는 webpack이 넣어 주는 수식 서식 CSS다. 글꼴 자료까지 담아 저장본에서도 수식이 그대로 보인다.
+/** 브라우저 설정을 기준으로 고른 첫 화면 언어다. 사용자가 고른 값이 있으면 이를 우선한다. */
+let currentLanguage = detectLanguage();
+try {
+    const savedLanguage = localStorage.getItem('mdtool-language');
+    if (savedLanguage === 'en' || savedLanguage === 'ko') currentLanguage = savedLanguage;
+} catch { /* 저장소가 차단되면 브라우저 언어만 사용한다. */ }
+
+/**
+ * 현재 화면 언어의 번역 문구를 읽는다.
+ * @param {string} key 번역 문구 키
+ * @param {Record<string, string|number>} [parameters] 문구에 넣을 값
+ * @returns {string} 번역한 문구
+ */
+const text = (key, parameters) => translate(currentLanguage, key, parameters);
+
+// 수식 서식은 문자열로 가져오며, css-loader가 글꼴 자료까지 번들 안에 넣는다.
 
 /**
  * HTML에서 뜻이 달라지는 글자를 안전한 표기로 바꾼다.
@@ -99,10 +116,10 @@ markdown.core.ruler.before('inline', 'github_alerts', (state) => {
  * @param {number} index 지금 처리하는 토큰 위치
  * @returns {string} 알림 상자 시작 HTML
  */
-markdown.renderer.rules.alert_open = (tokens, index) => {
+markdown.renderer.rules.alert_open = (tokens, index, options, environment) => {
     const kind = tokens[index].meta.kind;
-    const titles = { NOTE: '참고', TIP: '팁', IMPORTANT: '중요', WARNING: '주의', CAUTION: '경고' };
-    return `<div class="markdown-alert markdown-alert-${kind.toLowerCase()}"><p class="markdown-alert-title">${titles[kind]}</p>\n`;
+    const titleKeys = { NOTE: 'alertNote', TIP: 'alertTip', IMPORTANT: 'alertImportant', WARNING: 'alertWarning', CAUTION: 'alertCaution' };
+    return `<div class="markdown-alert markdown-alert-${kind.toLowerCase()}"><p class="markdown-alert-title">${translate(environment.language, titleKeys[kind])}</p>\n`;
 };
 /**
  * 알림 상자를 닫는다.
@@ -306,10 +323,11 @@ function renderDiagram(content, theme) {
  * 변환 결과를 정리한 뒤 신뢰할 수 있는 수식과 다이어그램 출력만 삽입한다.
  * @param {string} source Markdown 원문
  * @param {'light'|'dark'} theme 다이어그램에 적용할 테마
+ * @param {'en'|'ko'} language 안내 문구에 적용할 언어
  * @returns {Promise<string>} 문서 본문 HTML
  */
-async function renderMarkdown(source, theme) {
-    const environment = { key: `render-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`, math: [], diagrams: [] };
+async function renderMarkdown(source, theme, language) {
+    const environment = { key: `render-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`, math: [], diagrams: [], language };
     const fragment = DOMPurify.sanitize(markdown.render(source, environment), {
         RETURN_DOM_FRAGMENT: true,
         USE_PROFILES: { html: true },
@@ -349,7 +367,7 @@ async function renderMarkdown(source, theme) {
             element.innerHTML = await renderDiagram(diagram.content, theme);
         } catch {
             // 잘못된 다이어그램도 원문을 표시하여 나머지 문서 열람과 저장을 계속한다.
-            element.innerHTML = `<p class="render-error">다이어그램을 표시하지 못했습니다. Mermaid 문법을 확인해 주세요.</p><pre><code>${escapeHtml(diagram.content)}</code></pre>`;
+            element.innerHTML = `<p class="render-error">${translate(language, 'diagramError')}</p><pre><code>${escapeHtml(diagram.content)}</code></pre>`;
         }
     }
     return container.innerHTML;
@@ -362,11 +380,12 @@ async function renderMarkdown(source, theme) {
  * @param {'light'|'dark'} theme 적용할 테마
  * @param {boolean} [standalone] 서식을 문서 안에 모두 담아 혼자 열리게 할지 여부
  * @param {boolean} [embedFonts] 독립 문서에 글꼴 자료까지 담을지 여부
+ * @param {'en'|'ko'} [language] 문서 안 안내 문구의 언어
  * @returns {Promise<string>} 완성한 문서 HTML
  */
-async function createHtml(source, filename, theme, standalone = false, embedFonts = true) {
-    const body = await renderMarkdown(source, theme);
-    const mathStyles = body.includes('class="katex') ? MATH_STYLES : '';
+async function createHtml(source, filename, theme, standalone = false, embedFonts = true, language = currentLanguage) {
+    const body = await renderMarkdown(source, theme, language);
+    const mathStyles = body.includes('class="katex') ? mathStylesheet : '';
     let styleMarkup;
     if (!standalone) {
         styleMarkup = `<link rel="stylesheet" href="${escapeHtml(documentStylesheet)}">${mathStyles ? `<style>${mathStyles}</style>` : ''}`;
@@ -386,7 +405,7 @@ async function createHtml(source, filename, theme, standalone = false, embedFont
         : "data: 'self'";
     const baseMarkup = standalone ? '' : `<base href="${escapeHtml(window.location.href)}">`;
     return `<!DOCTYPE html>
-<html lang="ko" data-theme="${theme}">
+<html lang="${language}" data-theme="${theme}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -404,17 +423,18 @@ const elements = Object.fromEntries([
     'editor', 'workspace', 'source-panel', 'preview-panel', 'preview', 'filename',
     'dirty-indicator', 'message', 'line-count', 'byte-count', 'theme-button', 'source-state',
     'file-input', 'save-dialog', 'save-message', 'new-button', 'open-button', 'save-button', 'print-button',
-    'font-option', 'embed-fonts', 'pdf-theme-option', 'pdf-theme-light', 'pdf-theme-dark', 'download-button', 'cancel-save'
+    'font-option', 'embed-fonts', 'pdf-theme-option', 'pdf-theme-light', 'pdf-theme-dark', 'download-button', 'cancel-save',
+    'language-select'
 ].map((id) => [id, document.getElementById(id)]));
 
 /**
  * 지금 편집 중인 문서와 화면 상태다.
  * @type {{
  *     source: string, savedSource: string, filename: string,
- *     mode: 'edit'|'view'|'split', theme: 'light'|'dark', bom: boolean, newline: string
+ *     mode: 'edit'|'view'|'split', theme: 'light'|'dark', language: 'en'|'ko', bom: boolean, newline: string
  * }}
  */
-const state = { source: '', savedSource: '', filename: 'notitle', mode: 'edit', theme: 'light', bom: false, newline: '\n' };
+const state = { source: '', savedSource: '', filename: 'notitle', mode: 'edit', theme: 'light', language: currentLanguage, bom: false, newline: '\n' };
 
 /** 미리보기 요청 순번이다. 늦게 끝난 변환이 최신 화면을 덮어쓰지 못하게 한다. */
 let previewRevision = 0;
@@ -440,6 +460,9 @@ const PRINT_RESOURCE_TIMEOUT = 15000;
 /** 저장 요청 순번이다. 저장 창을 닫으면 진행 중이던 요청을 버린다. */
 let saveRevision = 0;
 
+/** 현재 표시 중인 상태 안내다. 언어를 바꿀 때 같은 뜻으로 다시 번역한다. */
+let currentMessage = { key: '', error: false, parameters: {} };
+
 /**
  * 마지막으로 저장한 뒤 원문이 바뀌었는지 확인한다.
  * @returns {boolean} 수정된 내용이 있으면 참
@@ -463,8 +486,8 @@ const countLines = (source) => source.split(/\r\n|\r|\n/).length;
 // 원문 편집과 줄번호, Markdown 문법 강조는 Monaco 편집기가 모두 담당한다.
 const sourceEditor = createSourceEditor({
     host: elements.editor,
-    ariaLabel: 'Markdown 원문',
-    placeholder: 'Markdown으로 새로운 문서를 작성해 보세요.',
+    ariaLabel: text('editorAriaLabel'),
+    placeholder: text('editorPlaceholder'),
     onChange: handleSourceChange
 });
 
@@ -506,12 +529,14 @@ function schedulePreview() {
 
 /**
  * 화면 위쪽 안내 줄에 알림을 표시한다.
- * @param {string} text 표시할 문구. 빈 문자열이면 안내를 지운다.
+ * @param {string} key 번역 문구 키. 빈 문자열이면 안내를 지운다.
  * @param {boolean} [error] 오류 안내로 표시할지 여부
+ * @param {Record<string, string|number>} [parameters] 문구에 넣을 값
  * @returns {void}
  */
-function message(text, error = false) {
-    elements.message.textContent = text;
+function message(key, error = false, parameters = {}) {
+    currentMessage = { key, error, parameters };
+    elements.message.textContent = key ? text(key, parameters) : '';
     elements.message.dataset.error = String(error);
 }
 
@@ -522,9 +547,10 @@ function message(text, error = false) {
 function updateStats() {
     const lines = countLines(state.source);
     const bytes = markdownBytes().length;
-    elements['line-count'].textContent = `${lines.toLocaleString('ko-KR')}줄`;
-    elements['byte-count'].textContent = `${bytes.toLocaleString('ko-KR')} B`;
-    elements['byte-count'].title = 'UTF-8로 Markdown을 저장할 때의 바이트 수';
+    const locale = state.language === 'ko' ? 'ko-KR' : 'en-US';
+    elements['line-count'].textContent = text(lines === 1 ? 'lineCountOne' : 'lineCount', { count: lines.toLocaleString(locale) });
+    elements['byte-count'].textContent = `${bytes.toLocaleString(locale)} B`;
+    elements['byte-count'].title = text('byteTitle');
     elements.filename.textContent = state.filename;
     elements['dirty-indicator'].hidden = !isDirty();
     document.title = `${isDirty() ? '● ' : ''}${state.filename} — Markdown Tool`;
@@ -539,13 +565,13 @@ async function refreshPreview() {
     const { source, filename, theme } = state;
     elements.preview.setAttribute('aria-busy', 'true');
     try {
-        const html = await createHtml(source, filename, theme);
+        const html = await createHtml(source, filename, theme, false, true, state.language);
         // 이전 파일이나 이전 테마의 늦은 렌더링이 최신 화면을 덮어쓰지 못하게 한다.
         if (revision === previewRevision) elements.preview.srcdoc = html;
     } catch {
         if (revision === previewRevision) {
             elements.preview.srcdoc = '';
-            message('미리보기를 만들지 못했습니다. 원문은 그대로 보존되어 있습니다.', true);
+            message('previewError', true);
         }
     } finally {
         if (revision === previewRevision) elements.preview.removeAttribute('aria-busy');
@@ -564,7 +590,7 @@ function setMode(mode) {
     elements['preview-panel'].hidden = mode === 'edit';
     // 보기 모드에서만 편집을 막는다. 같이 보기에서는 왼쪽에서 원문을 그대로 고칠 수 있다.
     sourceEditor.setReadOnly(mode === 'view');
-    elements['source-state'].textContent = mode === 'view' ? '읽기 전용' : '편집 가능';
+    elements['source-state'].textContent = text(mode === 'view' ? 'readOnly' : 'editable');
     document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
     cancelScheduledPreview();
     if (mode !== 'edit') void refreshPreview();
@@ -601,7 +627,7 @@ function setDocument(source, filename, bom = false) {
  * @returns {boolean} 문서를 바꿔도 되면 참
  */
 function canReplaceDocument() {
-    return !isDirty() || window.confirm('저장하지 않은 변경 사항이 있습니다. 내용을 버리고 계속할까요?');
+    return !isDirty() || window.confirm(text('discardConfirm'));
 }
 
 /**
@@ -613,7 +639,7 @@ async function openFile(file) {
     if (!file) return;
     const revision = ++fileRevision;
     if (!/\.(md|markdown)$/i.test(file.name)) {
-        message('Markdown 파일(.md 또는 .markdown)을 선택해 주세요.', true);
+        message('invalidExtension', true);
         return;
     }
     try {
@@ -623,9 +649,9 @@ async function openFile(file) {
         if (revision !== fileRevision || !canReplaceDocument()) return;
         const bom = source.startsWith('\uFEFF');
         setDocument(bom ? source.slice(1) : source, file.name, bom);
-        message('파일을 불러왔습니다.');
+        message('fileLoaded');
     } catch {
-        if (revision === fileRevision) message('파일을 읽지 못했습니다. UTF-8로 저장된 Markdown 파일인지 확인해 주세요.', true);
+        if (revision === fileRevision) message('fileReadError', true);
     }
 }
 
@@ -646,11 +672,11 @@ const SAVE_TYPES = {
  */
 async function createContents(format, snapshot, embedFonts, pdfTheme) {
     if (format === 'md') return markdownBytes(snapshot.source, snapshot.bom);
-    if (format === 'html') return createHtml(snapshot.source, snapshot.filename, snapshot.theme, true, embedFonts);
+    if (format === 'html') return createHtml(snapshot.source, snapshot.filename, snapshot.theme, true, embedFonts, snapshot.language);
     // PDF 변환에 쓰는 자료는 용량이 크므로 이 형식을 고를 때만 내려받는다.
     // 그림으로 떠 올 때는 바깥 자료를 다시 불러올 수 없어 글꼴까지 담은 독립 문서를 사용한다.
     const [html, { exportPdf }] = await Promise.all([
-        createHtml(snapshot.source, snapshot.filename, pdfTheme, true, true),
+        createHtml(snapshot.source, snapshot.filename, pdfTheme, true, true, snapshot.language),
         import('./pdf-export.js')
     ]);
     return exportPdf(html, snapshot.filename);
@@ -725,37 +751,39 @@ async function waitForPrintLayout(printWindow) {
 
 /**
  * 현재 문서를 A4 페이지 여백이 적용된 독립 HTML로 만들어 브라우저 인쇄 창을 연다.
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} 인쇄 창을 열었으면 참
  */
 async function printDocument() {
-    if (printing) return;
+    if (printing) return false;
     // 비동기 변환 뒤에 창을 열면 팝업 차단 대상이 되므로 클릭 처리 중 먼저 연다.
     const printWindow = window.open('', '_blank', 'popup,width=900,height=700');
     if (!printWindow) {
-        message('인쇄 창이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.', true);
-        return;
+        message('printBlocked', true);
+        return false;
     }
     printing = true;
     elements['print-button'].disabled = true;
     const snapshot = { ...state };
     try {
-        printWindow.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${escapeHtml(snapshot.filename)} 인쇄 준비</title></head><body><p>인쇄용 문서를 준비하고 있습니다…</p></body></html>`);
+        printWindow.document.write(`<!DOCTYPE html><html lang="${snapshot.language}"><head><meta charset="UTF-8"><title>${escapeHtml(translate(snapshot.language, 'printPreparingTitle', { filename: snapshot.filename }))}</title></head><body><p>${translate(snapshot.language, 'printPreparing')}</p></body></html>`);
         printWindow.document.close();
         // 인쇄는 종이를 기준으로 밝기 테마를 사용하고, 상대 그림 주소는 현재 앱 주소를 기준으로 읽는다.
-        const html = await createHtml(snapshot.source, snapshot.filename, 'light', true, true);
-        if (printWindow.closed) return;
+        const html = await createHtml(snapshot.source, snapshot.filename, 'light', true, true, snapshot.language);
+        if (printWindow.closed) return false;
         const printHtml = html.replace('<meta http-equiv="Content-Security-Policy"', `<base href="${escapeHtml(window.location.href)}">\n<meta http-equiv="Content-Security-Policy"`);
         printWindow.document.open();
         printWindow.document.write(printHtml);
         printWindow.document.close();
         await waitForPrintLayout(printWindow);
-        if (printWindow.closed) return;
+        if (printWindow.closed) return false;
         printWindow.focus();
         printWindow.print();
-        message('브라우저 인쇄 창을 열었습니다.');
+        message('printOpened');
+        return true;
     } catch {
         if (!printWindow.closed) printWindow.close();
-        message('인쇄용 문서를 만들지 못했습니다. 다시 시도해 주세요.', true);
+        message('printError', true);
+        return false;
     } finally {
         printing = false;
         elements['print-button'].disabled = false;
@@ -778,7 +806,7 @@ async function saveDocument() {
     for (const option of options) option.disabled = true;
     elements['download-button'].disabled = true;
     elements['cancel-save'].disabled = true;
-    elements['save-message'].textContent = '다운로드를 준비하고 있습니다…';
+    elements['save-message'].textContent = text('savePreparing');
     try {
         const filename = downloadName(snapshot.filename, format);
         const contents = await createContents(format, snapshot, embedFonts, pdfTheme);
@@ -788,9 +816,9 @@ async function saveDocument() {
         if (format === 'md' && state.source === snapshot.source) state.savedSource = snapshot.source;
         elements['save-dialog'].close();
         updateStats();
-        message(`${filename} 다운로드를 요청했습니다.`);
+        message('downloadRequested', false, { filename });
     } catch {
-        elements['save-message'].textContent = '저장 파일을 만들지 못했습니다. 다시 시도해 주세요.';
+        elements['save-message'].textContent = text('saveError');
     } finally {
         saving = false;
         for (const option of options) option.disabled = false;
@@ -808,7 +836,7 @@ async function saveDocument() {
 function applyTheme(theme, persist = true) {
     state.theme = theme;
     document.documentElement.dataset.theme = theme;
-    elements['theme-button'].textContent = theme === 'dark' ? '밝기 모드' : '다크 모드';
+    elements['theme-button'].textContent = text(theme === 'dark' ? 'lightMode' : 'darkMode');
     elements['theme-button'].setAttribute('aria-pressed', String(theme === 'dark'));
     sourceEditor.applyTheme(theme);
     if (persist) {
@@ -820,15 +848,191 @@ function applyTheme(theme, persist = true) {
     }
 }
 
+/**
+ * 화면의 정적·동적 문구와 문서 언어를 한꺼번에 바꾼다.
+ * @param {'en'|'ko'|string} language 적용할 언어
+ * @param {boolean} [persist] 브라우저에 선택을 기억할지 여부
+ * @returns {void}
+ */
+function applyLanguage(language, persist = true) {
+    currentLanguage = normalizeLanguage(language);
+    state.language = currentLanguage;
+    document.documentElement.lang = currentLanguage;
+    elements['language-select'].value = currentLanguage;
+    for (const element of document.querySelectorAll('[data-i18n]')) {
+        element.textContent = text(element.dataset.i18n);
+    }
+    for (const element of document.querySelectorAll('[data-i18n-aria-label]')) {
+        element.setAttribute('aria-label', text(element.dataset.i18nAriaLabel));
+    }
+    for (const element of document.querySelectorAll('[data-i18n-title]')) {
+        element.title = text(element.dataset.i18nTitle);
+    }
+    sourceEditor.setLanguage({ ariaLabel: text('editorAriaLabel'), placeholder: text('editorPlaceholder') });
+    elements['source-state'].textContent = text(state.mode === 'view' ? 'readOnly' : 'editable');
+    elements['theme-button'].textContent = text(state.theme === 'dark' ? 'lightMode' : 'darkMode');
+    updateStats();
+    if (currentMessage.key) message(currentMessage.key, currentMessage.error, currentMessage.parameters);
+    if (persist) {
+        try { localStorage.setItem('mdtool-language', currentLanguage); } catch { /* 저장소가 차단되어도 언어 전환은 유지한다. */ }
+    }
+    if (state.mode !== 'edit') {
+        cancelScheduledPreview();
+        void refreshPreview();
+    }
+}
+
+/**
+ * 기존 변경 확인을 거친 뒤 빈 문서를 만든다. 화면과 WebMCP가 같은 규칙을 사용한다.
+ * @returns {boolean} 새 문서를 만들었으면 참
+ */
+function createNewDocument() {
+    if (!canReplaceDocument()) return false;
+    fileRevision += 1;
+    setDocument('', 'notitle');
+    message('newCreated');
+    return true;
+}
+
+/**
+ * WebMCP가 전달한 Markdown을 현재 편집 문서에 반영한다.
+ * 파일 불러오기와 달리 파일명·BOM·줄바꿈 규칙은 현재 문서 값을 유지한다.
+ * @param {string} source 새 Markdown 원문
+ * @returns {void}
+ */
+function setMarkdownSource(source) {
+    const normalized = source.replace(/\r\n|\r/g, '\n');
+    sourceEditor.setText(normalized);
+    state.source = normalized.replace(/\n/g, state.newline);
+    message('');
+    updateStats();
+    if (state.mode === 'split') schedulePreview();
+    else if (state.mode === 'view') void refreshPreview();
+}
+
+/**
+ * 지원 브라우저에 화면 기능을 WebMCP 도구로 등록한다.
+ * 기능이 없거나 권한 때문에 등록이 거절되어도 일반 화면 초기화는 계속한다.
+ * @returns {Promise<void>}
+ */
+async function registerWebMcpTools() {
+    const modelContext = document.modelContext;
+    if (!modelContext || typeof modelContext.registerTool !== 'function') return;
+    const emptySchema = { type: 'object', properties: {}, additionalProperties: false };
+    const tools = [
+        {
+            name: 'get_document_state',
+            title: 'Get Markdown document state',
+            description: 'Returns the current Markdown source and the visible editor state without opening or saving files.',
+            inputSchema: emptySchema,
+            annotations: { readOnlyHint: true, consequentialHint: false },
+            execute: () => ({
+                source: state.source,
+                filename: state.filename,
+                modified: isDirty(),
+                lineCount: countLines(state.source),
+                byteCount: markdownBytes().length,
+                mode: state.mode,
+                theme: state.theme,
+                language: state.language
+            })
+        },
+        {
+            name: 'set_markdown_source',
+            title: 'Set Markdown source',
+            description: 'Replaces the Markdown source in the current editor without opening a file.',
+            inputSchema: {
+                type: 'object',
+                properties: { source: { type: 'string', description: 'The complete Markdown source to place in the editor.' } },
+                required: ['source'],
+                additionalProperties: false
+            },
+            annotations: { readOnlyHint: false, consequentialHint: true },
+            execute: ({ source } = {}) => {
+                if (typeof source !== 'string') throw new TypeError('source must be a string');
+                setMarkdownSource(source);
+                return { updated: true, lineCount: countLines(state.source), byteCount: markdownBytes().length };
+            }
+        },
+        {
+            name: 'create_new_document',
+            title: 'Create a new Markdown document',
+            description: 'Clears the current editor after the same unsaved-change confirmation used by the New button.',
+            inputSchema: emptySchema,
+            annotations: { readOnlyHint: false, consequentialHint: true },
+            execute: () => ({ created: createNewDocument() })
+        },
+        {
+            name: 'set_view_mode',
+            title: 'Set editor view mode',
+            description: 'Changes the page to edit, preview, or side-by-side mode.',
+            inputSchema: {
+                type: 'object',
+                properties: { mode: { type: 'string', enum: ['edit', 'view', 'split'] } },
+                required: ['mode'],
+                additionalProperties: false
+            },
+            annotations: { readOnlyHint: false, consequentialHint: false },
+            execute: ({ mode } = {}) => {
+                if (!['edit', 'view', 'split'].includes(mode)) throw new TypeError('mode must be edit, view, or split');
+                setMode(mode);
+                return { mode: state.mode };
+            }
+        },
+        {
+            name: 'set_theme',
+            title: 'Set display theme',
+            description: 'Changes the page theme and remembers the choice in this browser when storage is available.',
+            inputSchema: {
+                type: 'object',
+                properties: { theme: { type: 'string', enum: ['light', 'dark'] } },
+                required: ['theme'],
+                additionalProperties: false
+            },
+            annotations: { readOnlyHint: false, consequentialHint: false },
+            execute: ({ theme } = {}) => {
+                if (!['light', 'dark'].includes(theme)) throw new TypeError('theme must be light or dark');
+                applyTheme(theme);
+                return { theme: state.theme };
+            }
+        },
+        {
+            name: 'set_language',
+            title: 'Set interface language',
+            description: 'Changes the Markdown Tool interface language to English or Korean.',
+            inputSchema: {
+                type: 'object',
+                properties: { language: { type: 'string', enum: ['en', 'ko'] } },
+                required: ['language'],
+                additionalProperties: false
+            },
+            annotations: { readOnlyHint: false, consequentialHint: false },
+            execute: ({ language } = {}) => {
+                if (!['en', 'ko'].includes(language)) throw new TypeError('language must be en or ko');
+                applyLanguage(language);
+                return { language: state.language };
+            }
+        },
+        {
+            name: 'print_document',
+            title: 'Print the Markdown document',
+            description: 'Creates the print document and opens the browser print dialog without saving a file.',
+            inputSchema: emptySchema,
+            annotations: { readOnlyHint: false, consequentialHint: true },
+            execute: async () => ({ opened: await printDocument() })
+        }
+    ];
+    for (const tool of tools) {
+        try {
+            await modelContext.registerTool(tool);
+        } catch { /* WebMCP 권한이나 초안 구현 차이가 있어도 일반 화면 기능은 유지한다. */ }
+    }
+}
+
 // 아래부터는 화면 조작을 문서 기능에 연결한다.
 
 // 새로 만들기는 빈 문서로 되돌린다.
-elements['new-button'].addEventListener('click', () => {
-    if (!canReplaceDocument()) return;
-    fileRevision += 1;
-    setDocument('', 'notitle');
-    message('새 문서를 만들었습니다.');
-});
+elements['new-button'].addEventListener('click', createNewDocument);
 // 파일 불러오기 버튼은 숨겨 둔 파일 선택 창을 연다.
 elements['open-button'].addEventListener('click', () => elements['file-input'].click());
 
@@ -874,6 +1078,7 @@ elements['download-button'].addEventListener('click', () => void saveDocument())
 elements['save-dialog'].addEventListener('close', () => { saveRevision += 1; });
 
 elements['theme-button'].addEventListener('click', () => applyTheme(state.theme === 'dark' ? 'light' : 'dark'));
+elements['language-select'].addEventListener('change', () => applyLanguage(elements['language-select'].value));
 
 // Ctrl+S와 Cmd+S로도 저장 창을 연다.
 document.addEventListener('keydown', (event) => {
@@ -896,4 +1101,6 @@ try {
     if (savedTheme === 'light' || savedTheme === 'dark') initialTheme = savedTheme;
 } catch { /* 브라우저의 기본 테마로 시작한다. */ }
 applyTheme(initialTheme, false);
+applyLanguage(currentLanguage, false);
 setDocument('', 'notitle');
+void registerWebMcpTools();
