@@ -404,7 +404,7 @@ const elements = Object.fromEntries([
     'editor', 'workspace', 'source-panel', 'preview-panel', 'preview', 'filename',
     'dirty-indicator', 'message', 'line-count', 'byte-count', 'theme-button', 'source-state',
     'file-input', 'save-dialog', 'save-message', 'new-button', 'open-button', 'save-button',
-    'font-option', 'embed-fonts', 'download-button', 'cancel-save'
+    'font-option', 'embed-fonts', 'pdf-theme-option', 'pdf-theme-light', 'pdf-theme-dark', 'download-button', 'cancel-save'
 ].map((id) => [id, document.getElementById(id)]));
 
 /**
@@ -632,19 +632,19 @@ const SAVE_TYPES = {
 
 /**
  * 선택한 형식에 맞는 저장 자료를 만든다.
- * PDF는 인쇄를 기준으로 삼아 저장할 때의 테마와 무관하게 밝은 테마로 담는다.
  * @param {'md'|'html'|'pdf'} format 저장 형식
  * @param {typeof state} snapshot 저장을 시작한 시점의 문서 상태
  * @param {boolean} embedFonts HTML 저장본에 글꼴을 담을지 여부
+ * @param {'light'|'dark'} pdfTheme PDF 저장본에 적용할 테마
  * @returns {Promise<Uint8Array|string|ArrayBuffer>} 내려받을 자료
  */
-async function createContents(format, snapshot, embedFonts) {
+async function createContents(format, snapshot, embedFonts, pdfTheme) {
     if (format === 'md') return markdownBytes(snapshot.source, snapshot.bom);
     if (format === 'html') return createHtml(snapshot.source, snapshot.filename, snapshot.theme, true, embedFonts);
     // PDF 변환에 쓰는 자료는 용량이 크므로 이 형식을 고를 때만 내려받는다.
     // 그림으로 떠 올 때는 바깥 자료를 다시 불러올 수 없어 글꼴까지 담은 독립 문서를 사용한다.
     const [html, { exportPdf }] = await Promise.all([
-        createHtml(snapshot.source, snapshot.filename, 'light', true, true),
+        createHtml(snapshot.source, snapshot.filename, pdfTheme, true, true),
         import('./pdf-export.js')
     ]);
     return exportPdf(html, snapshot.filename);
@@ -692,6 +692,7 @@ async function saveDocument() {
     const snapshot = { ...state };
     const format = document.querySelector('input[name="save-format"]:checked').value;
     const embedFonts = format === 'html' && elements['embed-fonts'].checked;
+    const pdfTheme = format === 'pdf' && elements['pdf-theme-dark'].checked ? 'dark' : 'light';
     const options = [...elements['save-dialog'].querySelectorAll('input')];
     for (const option of options) option.disabled = true;
     elements['download-button'].disabled = true;
@@ -699,7 +700,7 @@ async function saveDocument() {
     elements['save-message'].textContent = '다운로드를 준비하고 있습니다…';
     try {
         const filename = downloadName(snapshot.filename, format);
-        const contents = await createContents(format, snapshot, embedFonts);
+        const contents = await createContents(format, snapshot, embedFonts, pdfTheme);
         if (revision !== saveRevision || !elements['save-dialog'].open) return;
         download(contents, filename, SAVE_TYPES[format]);
         // HTML 내보내기는 원문 저장을 대체하지 않으므로 Markdown 저장 때만 변경 표시를 해제한다.
@@ -769,15 +770,20 @@ function showSaveDialog() {
     elements['save-message'].textContent = '';
     document.querySelector('input[name="save-format"][value="md"]').checked = true;
     elements['embed-fonts'].checked = true;
+    elements['pdf-theme-light'].checked = state.theme === 'light';
+    elements['pdf-theme-dark'].checked = state.theme === 'dark';
     elements['font-option'].hidden = true;
+    elements['pdf-theme-option'].hidden = true;
     elements['save-dialog'].showModal();
 }
 elements['save-button'].addEventListener('click', showSaveDialog);
 
-// 글꼴 포함은 HTML 저장에만 있는 선택이라 그 형식에서만 보여 준다.
+// HTML 글꼴과 PDF 테마는 해당 저장 형식에서만 고를 수 있다.
 document.querySelectorAll('input[name="save-format"]').forEach((radio) => {
     radio.addEventListener('change', () => {
-        elements['font-option'].hidden = radio.value !== 'html';
+        const format = document.querySelector('input[name="save-format"]:checked').value;
+        elements['font-option'].hidden = format !== 'html';
+        elements['pdf-theme-option'].hidden = format !== 'pdf';
     });
 });
 elements['download-button'].addEventListener('click', () => void saveDocument());

@@ -65,6 +65,14 @@
             </label>
         </div>
         <label id="font-option" hidden><input id="embed-fonts" type="checkbox" checked/> <span><strong>글꼴 포함</strong><small> 해제하면 CDN에서 글꼴을 불러옵니다.</small></span></label>
+        <fieldset id="pdf-theme-option" hidden>
+            <legend>PDF 테마</legend>
+            <p>이 선택은 저장할 PDF에만 적용되며, 현재 화면과 미리보기 테마는 바꾸지 않습니다.</p>
+            <div class="pdf-theme-options">
+                <label><input id="pdf-theme-light" type="radio" name="pdf-theme" value="light" checked/> 밝기 모드</label>
+                <label><input id="pdf-theme-dark" type="radio" name="pdf-theme" value="dark"/> 다크 모드</label>
+            </div>
+        </fieldset>
         <p id="save-message" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
             <form method="dialog"><button id="cancel-save" type="submit">취소</button></form>

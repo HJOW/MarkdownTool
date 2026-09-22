@@ -57,16 +57,23 @@ async function changeMode(page, mode) {
  * @param {import('@playwright/test').Page} page 검사 중인 화면
  * @param {'md'|'html'|'pdf'} format 고를 저장 형식
  * @param {boolean} [embedFonts] HTML 저장에서 글꼴 포함을 켤지 여부
+ * @param {'light'|'dark'} [pdfTheme] PDF 저장에 적용할 테마
  * @returns {Promise<import('@playwright/test').Download>} 시작된 다운로드
  */
-async function save(page, format, embedFonts = true) {
+async function save(page, format, embedFonts = true, pdfTheme = 'light') {
     await page.getByRole('button', { name: '저장', exact: true }).click();
     await page.locator(`input[name="save-format"][value="${format}"]`).check();
     if (format === 'html') {
         await expect(page.locator('#font-option')).toBeVisible();
         await page.locator('#embed-fonts').setChecked(embedFonts);
+        await expect(page.locator('#pdf-theme-option')).toBeHidden();
+    } else if (format === 'pdf') {
+        await expect(page.locator('#font-option')).toBeHidden();
+        await expect(page.locator('#pdf-theme-option')).toBeVisible();
+        await page.locator(`input[name="pdf-theme"][value="${pdfTheme}"]`).check();
     } else {
         await expect(page.locator('#font-option')).toBeHidden();
+        await expect(page.locator('#pdf-theme-option')).toBeHidden();
     }
     const pending = page.waitForEvent('download');
     await page.locator('#download-button').click();
@@ -302,6 +309,19 @@ test('PDF 저장본을 A4 여러 쪽으로 나누고 원문 수정 표시는 유
     expect(pages).toBeGreaterThan(1);
     // PDF는 원문 저장을 대체하지 않으므로 수정 표시를 남긴다.
     await expect(page.locator('#dirty-indicator')).toBeVisible();
+});
+
+test('PDF 테마는 저장본에서만 고르고 현재 화면 테마를 바꾸지 않는다', async ({ page }) => {
+    const appTheme = await page.locator('html').getAttribute('data-theme');
+    await page.getByRole('button', { name: '저장', exact: true }).click();
+    await page.locator('input[name="save-format"][value="pdf"]').check();
+    await expect(page.locator('#pdf-theme-option')).toBeVisible();
+    await page.locator('#pdf-theme-dark').check();
+    await expect(page.locator('#pdf-theme-dark')).toBeChecked();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', appTheme);
+    await page.getByRole('button', { name: '취소', exact: true }).click();
+    await expect(page.locator('#save-dialog')).toBeHidden();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', appTheme);
 });
 
 test('테마를 유지하고 줄번호 스크롤과 좁은 화면을 처리한다', async ({ page }) => {
